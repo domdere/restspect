@@ -6,8 +6,8 @@ author:             Dom De Re
 maintainer:         domdere@domdere.com
 copyright:          Copyright (C) 2010-2013 
 synopsis:           Parsers for a human readable REST API specification format
-category:           Web
-description:        Haskes for a REST API specification language
+category:           Text, Parser
+description:        Haskell for a REST API specification language
 homepage:           https://github.com/domdere/restparse
 bug-reports:        https://github.com/domdere/restparse
 cabal-version:      >= 1.10
