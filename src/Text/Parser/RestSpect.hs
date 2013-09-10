@@ -43,6 +43,13 @@ dataTypeListParser =
 dataType :: CharParser () DataType
 dataType = DataType <$> (dataTypeName <* string ":") <*> dataTypeType
 
+-- | Parses the Name of a DataType
+--
+-- >>> parse dataTypeName "(test)" "SomeName"
+-- Right (DataTypeName "SomeName")
+--
+-- >>> parse dataTypeName "(test)" "  \nSomeName"
+-- Right (DataTypeName "SomeName")
 dataTypeName :: CharParser () DataTypeName
 dataTypeName = (DataTypeName . pack) <$> many alphaNum
 
@@ -53,6 +60,9 @@ dataTypeName = (DataTypeName . pack) <$> many alphaNum
 --
 -- >>> parse dataTypeType "(test)" "Orange"
 -- Right (SingleType "Orange")
+--
+-- >>> parse dataTypeType "(test)" "[]\n"
+-- Right (SingleType "")
 dataTypeType :: CharParser () DataTypeType
 dataTypeType =
         try ((ListType . pack) <$> ((string "ListOf" *> skipSpaces) *> many alphaNum))
