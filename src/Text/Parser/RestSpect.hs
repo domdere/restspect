@@ -12,7 +12,9 @@ skipSpaces :: CharParser () (Maybe ())
 skipSpaces = optional $ skipMany1 space
 
 stringWithUnderscores :: CharParser () String
-stringWithUnderscores = many $ alphaNum <|> char '_'
+stringWithUnderscores = (:) <$> charParser <*> many charParser
+    where
+        charParser = alphaNum <|> char '_'
 
 listOf :: CharParser () a -> CharParser () [a]
 listOf p =
@@ -97,17 +99,71 @@ dataTypeName = (DataTypeName . pack) <$> (skipSpaces *> stringWithUnderscores)
 -- >>> parse dataTypeType "(test)" "ListOf Apple"
 -- Right (ListType "Apple")
 --
+-- >>> parse dataTypeType "(test)" "ListOf \n  \n Apple"
+-- Right (ListType "Apple")
+--
 -- >>> parse dataTypeType "(test)" "Orange"
 -- Right (SingleType "Orange")
 --
 -- >>> parse dataTypeType "(test)" "[]\n"
--- Right (SingleType "")
+-- Left "(test)" (line 1, column 1):
+-- unexpected "["
+-- expecting "ListOf", space, letter or digit or "_"
 --
 dataTypeType :: CharParser () DataTypeType
 dataTypeType =
         try ((ListType . pack)
     <$> ((string "ListOf" *> skipSpaces) *> stringWithUnderscores))
     <|> (SingleType . pack) <$> (skipSpaces *> stringWithUnderscores)
+
+-- | Parse a resource member
+--
+-- >>> parse resourceMember "(test)" "Person"
+-- Right (Member (DataTypeName "Person"))
+--
+-- >>> parse resourceMember "(test)" "ListOf Person"
+-- Right (ListMember (DataTypeName "Person"))
+--
+-- >>> parse resourceMember "(test)" "  \nPerson  \n  "
+-- Right (Member (DataTypeName "Person"))
+--
+-- >>> parse resourceMember "(test)" "ListOf  \n     Person  \n  "
+-- Right (ListMember (DataTypeName "Person"))
+--
+resourceMember :: CharParser () ResourceMember
+resourceMember = try (
+        ListMember
+    <$> ((string "ListOf" *> skipSpaces) *> dataTypeName))
+    <|> Member <$> (skipSpaces *> dataTypeName)
+
+-- | Parse the name of a resource
+--
+-- >>> parse resourceName "(test)" "SomeName"
+-- Right (ResourceName "SomeName")
+--
+-- >>> parse resourceName "(test)" "  \nSomeName   "
+-- Right (ResourceName "SomeName")
+--
+resourceName :: CharParser () ResourceName
+resourceName =
+        (ResourceName . pack)
+    <$> (skipSpaces *> stringWithUnderscores)
+
+-- | Parses a Resource Type
+--
+-- >>> parse resource "(test)" "Person [Name, Age]"
+-- Right (Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age")])
+--
+-- >>> parse resource "(test)" "[Name, Age]"
+-- Left "(test)" (line 1, column 1):
+-- unexpected "["
+-- expecting space, letter or digit or "_"
+--
+resource :: CharParser () Resource
+resource =
+        Resource
+    <$> resourceName
+    <*> (skipSpaces *> listOf resourceMember)
 
 eol :: CharParser () String
 eol =   try (string "\n\r")
