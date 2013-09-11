@@ -8,6 +8,24 @@ import Text.ParserCombinators.Parsec hiding ( many, optional, (<|>) )
 
 import Data.RestSpec hiding ( apiName )
 
+skipSpaces :: CharParser () (Maybe ())
+skipSpaces = optional $ skipMany1 space
+
+stringWithUnderscores :: CharParser () String
+stringWithUnderscores = many $ alphaNum <|> char '_'
+
+listOf :: CharParser () a -> CharParser () [a]
+listOf p =
+        string "["
+    *>  (p <* skipSpaces) `sepBy` (string "," <* skipSpaces)
+    <*  string "]"
+
+groupOf :: CharParser () a -> CharParser () [a]
+groupOf p =
+        string "("
+    *>  (p <* skipSpaces) `sepBy` (string "," <* skipSpaces)
+    <*  (skipSpaces *> string ")")
+
 -- | parses the contents of an entire REST API file:
 --
 -- >> parse restFile "(test)" "Name: hello\n"
@@ -18,42 +36,50 @@ import Data.RestSpec hiding ( apiName )
 -- unexpected " "
 -- expecting "Name: "
 --
--- >> parse restFile "(test)" "Random Pattern"
--- Right []
+-- >>> parse restFile "(test)" "`MyAPI` servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
+-- Right (RestSpec {apiName = ApiName "MyAPI", dataTypes = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]})
 --
 restFile :: CharParser () RestSpec
-restFile = RestSpec <$> apiName <*> dataTypeListParser
+restFile =
+        RestSpec
+    <$> (skipSpaces *> apiName)
+    <*> (skipSpaces *> dataTypeListParser)
 
-skipSpaces :: CharParser () (Maybe ())
-skipSpaces = optional $ skipMany1 space
-
-stringWithUnderscores :: CharParser () String
-stringWithUnderscores = many $ alphaNum <|> char '_'
-
-listOf :: CharParser () a -> CharParser () [a]
-listOf p = string "[" *> p `sepBy` string "," <* string "]"
-
-groupOf :: CharParser () a -> CharParser () [a]
-groupOf p = string "(" *> p `sepBy` string "," <* string ")"
 
 apiName :: CharParser () ApiName
-apiName = (ApiName . pack)
+apiName =
+        (ApiName . pack)
     <$> (string "`" *> many alphaNum <* string "`")
 
+-- | Parses a list of DataTypes.
+--
+-- >>> parse dataTypeListParser "(test)" "servesDataTypes [data_name : data_type, data_name : ListOf list_element, data_name :\n   ListOf onNewLine]"
+-- Right [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]
+--
+-- >>> parse dataTypeListParser "(test)" "servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
+-- Right [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]
+--
 dataTypeListParser :: CharParser () [DataType]
 dataTypeListParser =
-    string "servesDataTypes" *> listOf dataType
+        (string "servesDataTypes" <* skipSpaces)
+    *>  (skipSpaces *> listOf dataType)
 
 -- | Parses a DataType
 --
 -- >>> parse dataType "(test)" "data_name : data_type"
 -- Right (DataType (DataTypeName "data_name") (SingleType "data_type"))
 --
+-- >>> parse dataType "(test)" "data_name : ListOf list_element"
+-- Right (DataType (DataTypeName "data_name") (ListType "list_element"))
+--
+-- >>> parse dataType "(test)" "data_name :\n   ListOf onNewLine"
+-- Right (DataType (DataTypeName "data_name") (ListType "onNewLine"))
+--
 dataType :: CharParser () DataType
 dataType = DataType
     <$> (dataTypeName
         <* (skipSpaces *> string ":"))
-    <*> dataTypeType
+    <*> (skipSpaces *> dataTypeType)
 
 -- | Parses the Name of a DataType
 --
@@ -76,9 +102,11 @@ dataTypeName = (DataTypeName . pack) <$> (skipSpaces *> stringWithUnderscores)
 --
 -- >>> parse dataTypeType "(test)" "[]\n"
 -- Right (SingleType "")
+--
 dataTypeType :: CharParser () DataTypeType
 dataTypeType =
-        try ((ListType . pack) <$> ((string "ListOf" *> skipSpaces) *> stringWithUnderscores))
+        try ((ListType . pack)
+    <$> ((string "ListOf" *> skipSpaces) *> stringWithUnderscores))
     <|> (SingleType . pack) <$> (skipSpaces *> stringWithUnderscores)
 
 eol :: CharParser () String
