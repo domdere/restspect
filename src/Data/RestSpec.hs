@@ -27,6 +27,7 @@ newtype ResourceName = ResourceName Text deriving (Show, Read, Eq, Ord)
 data Resource = Resource ResourceName [ResourceMember] deriving (Show, Read, Eq, Ord)
 
 data RestSpec = RestSpec
-    {   apiName :: ApiName
-    ,   dataTypes :: [DataType]
+    {   apiNameOf :: ApiName
+    ,   dataTypesOf :: [DataType]
+    ,   resourcesOf :: [Resource]
     } deriving (Show, Eq)

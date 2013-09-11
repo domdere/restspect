@@ -1,4 +1,6 @@
-module Text.Parser.Restspect where
+module Text.Parser.RestSpect
+    (   restFile
+    ) where
 
 import Control.Applicative
 import Control.Monad
@@ -6,10 +8,10 @@ import Control.Monad
 import Data.Text
 import Text.ParserCombinators.Parsec hiding ( many, optional, (<|>) )
 
-import Data.RestSpec hiding ( apiName )
+import Data.RestSpec
 
 skipSpaces :: CharParser () (Maybe ())
-skipSpaces = optional $ skipMany1 space
+skipSpaces = optional $ skipMany space
 
 stringWithUnderscores :: CharParser () String
 stringWithUnderscores = (:) <$> charParser <*> many charParser
@@ -28,24 +30,25 @@ groupOf p =
     *>  (p <* skipSpaces) `sepBy` (string "," <* skipSpaces)
     <*  (skipSpaces *> string ")")
 
+precedes :: String -> CharParser () a -> CharParser () a
+precedes str parser =
+        (string str <* skipSpaces)
+    *>  (skipSpaces *> parser)
+
 -- | parses the contents of an entire REST API file:
 --
--- >> parse restFile "(test)" "Name: hello\n"
--- Right [RestSpec {apiName = ApiName "hello"}]
+-- >>> parse restFile "(test)" "`MyAPI` servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]\n    inResources\n    (   Person\n        [   Name\n        ,   Age\n        ,   Address\n        ]\n    )"
+-- Right (RestSpec {apiNameOf = ApiName "MyAPI", dataTypesOf = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")], resourcesOf = [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age"),Member (DataTypeName "Address")]]})
 --
--- >> parse restFile "(test)" "Name hello\n"
--- Left "(test)" (line 1, column 1):
--- unexpected " "
--- expecting "Name: "
---
--- >>> parse restFile "(test)" "`MyAPI` servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
--- Right (RestSpec {apiName = ApiName "MyAPI", dataTypes = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]})
+-- >>> parse restFile "(test)" "`MyAPI` servesDataTypes[data_name:data_type,data_name:ListOf list_element,data_name:ListOf onNewLine] inResources (Person [Name, Age, Address])"
+-- Right (RestSpec {apiNameOf = ApiName "MyAPI", dataTypesOf = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")], resourcesOf = [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age"),Member (DataTypeName "Address")]]})
 --
 restFile :: CharParser () RestSpec
 restFile =
         RestSpec
     <$> (skipSpaces *> apiName)
-    <*> (skipSpaces *> dataTypeListParser)
+    <*> (skipSpaces *> "servesDataTypes" `precedes` dataTypeListParser)
+    <*> (skipSpaces *> "inResources" `precedes` resourceList)
 
 
 apiName :: CharParser () ApiName
@@ -55,16 +58,14 @@ apiName =
 
 -- | Parses a list of DataTypes.
 --
--- >>> parse dataTypeListParser "(test)" "servesDataTypes [data_name : data_type, data_name : ListOf list_element, data_name :\n   ListOf onNewLine]"
+-- >>> parse dataTypeListParser "(test)" "[data_name : data_type, data_name : ListOf list_element, data_name :\n   ListOf onNewLine]"
 -- Right [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]
 --
--- >>> parse dataTypeListParser "(test)" "servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
+-- >>> parse dataTypeListParser "(test)" "[    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
 -- Right [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]
 --
 dataTypeListParser :: CharParser () [DataType]
-dataTypeListParser =
-        (string "servesDataTypes" <* skipSpaces)
-    *>  (skipSpaces *> listOf dataType)
+dataTypeListParser = listOf dataType
 
 -- | Parses a DataType
 --
@@ -164,6 +165,17 @@ resource =
         Resource
     <$> resourceName
     <*> (skipSpaces *> listOf resourceMember)
+
+-- | Parses a List of Resources
+--
+-- >>> parse resourceList "(test)" "(Person [Name, Age], Friends [Name, ListOf Name])"
+-- Right [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age")],Resource (ResourceName "Friends") [Member (DataTypeName "Name"),ListMember (DataTypeName "Name")]]
+--
+-- >>> parse resourceList "(test)" "(    Person [Name, Age]\n    ,   Friends [Name, ListOf Name]\n    )"
+-- Right [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age")],Resource (ResourceName "Friends") [Member (DataTypeName "Name"),ListMember (DataTypeName "Name")]]
+--
+resourceList :: CharParser () [Resource]
+resourceList = groupOf resource
 
 eol :: CharParser () String
 eol =   try (string "\n\r")
