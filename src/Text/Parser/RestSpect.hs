@@ -24,8 +24,11 @@ import Data.RestSpec hiding ( apiName )
 restFile :: CharParser () RestSpec
 restFile = RestSpec <$> apiName <*> dataTypeListParser
 
-skipSpaces :: CharParser () ()
-skipSpaces = skipMany1 space
+skipSpaces :: CharParser () (Maybe ())
+skipSpaces = optional $ skipMany1 space
+
+stringWithUnderscores :: CharParser () String
+stringWithUnderscores = many $ alphaNum <|> char '_'
 
 listOf :: CharParser () a -> CharParser () [a]
 listOf p = string "[" *> p `sepBy` string "," <* string "]"
@@ -34,24 +37,34 @@ groupOf :: CharParser () a -> CharParser () [a]
 groupOf p = string "(" *> p `sepBy` string "," <* string ")"
 
 apiName :: CharParser () ApiName
-apiName = (ApiName . pack) <$> (string "`" *> many alphaNum <* string "`")
+apiName = (ApiName . pack)
+    <$> (string "`" *> many alphaNum <* string "`")
 
 dataTypeListParser :: CharParser () [DataType]
 dataTypeListParser =
     string "servesDataTypes" *> listOf dataType
 
+-- | Parses a DataType
+--
+-- >>> parse dataType "(test)" "data_name : data_type"
+-- Right (DataType (DataTypeName "data_name") (SingleType "data_type"))
+--
 dataType :: CharParser () DataType
-dataType = DataType <$> (dataTypeName <* string ":") <*> dataTypeType
+dataType = DataType
+    <$> (dataTypeName
+        <* (skipSpaces *> string ":"))
+    <*> dataTypeType
 
 -- | Parses the Name of a DataType
 --
 -- >>> parse dataTypeName "(test)" "SomeName"
 -- Right (DataTypeName "SomeName")
 --
--- >>> parse dataTypeName "(test)" "  \nSomeName"
+-- >>> parse dataTypeName "(test)" "  \nSomeName   "
 -- Right (DataTypeName "SomeName")
+--
 dataTypeName :: CharParser () DataTypeName
-dataTypeName = (DataTypeName . pack) <$> many alphaNum
+dataTypeName = (DataTypeName . pack) <$> (skipSpaces *> stringWithUnderscores)
 
 -- | Parses the Type of a DataType
 --
@@ -65,8 +78,8 @@ dataTypeName = (DataTypeName . pack) <$> many alphaNum
 -- Right (SingleType "")
 dataTypeType :: CharParser () DataTypeType
 dataTypeType =
-        try ((ListType . pack) <$> ((string "ListOf" *> skipSpaces) *> many alphaNum))
-    <|> (SingleType . pack) <$> many alphaNum
+        try ((ListType . pack) <$> ((string "ListOf" *> skipSpaces) *> stringWithUnderscores))
+    <|> (SingleType . pack) <$> (skipSpaces *> stringWithUnderscores)
 
 eol :: CharParser () String
 eol =   try (string "\n\r")
