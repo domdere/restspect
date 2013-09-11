@@ -2,6 +2,10 @@ module Main where
 
 import System.Console.GetOpt
 import System.Environment
+import System.IO
+import Text.ParserCombinators.Parsec hiding ( many, optional, (<|>) )
+
+import Text.Parser.RestSpect
 
 data CommandLineOption = Help | Version deriving (Show, Eq)
 
@@ -40,15 +44,21 @@ checkCoreFlagsAndRunMain opts args
     | otherwise             = appMain opts args
 
 main :: IO ()
-main = do 
+main = do
     (opts, args, errorMsgs) <- getOpt argOrder (coreOptions ++ options) `fmap` getArgs
     if null errorMsgs then
         checkCoreFlagsAndRunMain opts args
     else
         ioError $ userError $ concat errorMsgs ++ usageMsg
 
--- Put the actual App code in here
 appMain :: [a] -> [String] -> IO ()
-appMain opts args = do
-    putStrLn "Command Line Args: "
-    mapM_ putStrLn args
+appMain _ args
+    | length args /= 1 = do
+        putStrLn $ "Error: Expected 1 argument, got " ++ show (length args) ++ "instead"
+        printUsageMsg
+    | otherwise = do
+        -- for now all this does is load up the .rest file and try to parse it,
+        -- Will do the rest once the parsing is finished..
+        handle <- openFile (head args) ReadMode
+        contents <- hGetContents handle
+        print $ show $ parse restFile (head args) contents

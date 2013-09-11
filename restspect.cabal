@@ -40,20 +40,20 @@ library
 
     hs-source-dirs:     src
 
-    exposed-modules:    
+    exposed-modules:
 
 executable              restdoc
     default-language:   Haskell2010
     -- .hs or .lhs file containing the Main module.
     hs-source-dirs:     main
-    main-is:            Main.hs            
+                        src
+    main-is:            Main.hs
  
     ghc-options:        -Wall
                         -fno-warn-unused-imports
                         -fno-warn-unused-binds
                         -fno-warn-unused-do-bind
                         -fno-warn-type-defaults
-                        -- -i.:..  
                         -optl-Wl,-rpath,$ORIGIN 
     --extra-libraries: 
     --extra-lib-dirs: 
@@ -62,6 +62,8 @@ executable              restdoc
   
     -- Other library packages from which modules are imported.
     build-depends:      base < 5 && >= 4
+                        , parsec >= 3.1.3
+                        , text >= 0.11.3.1
 
 test-suite              doctests
     type:

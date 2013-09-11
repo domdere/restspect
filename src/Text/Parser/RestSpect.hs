@@ -1,4 +1,6 @@
-module Text.Parser.Restspect where
+module Text.Parser.RestSpect
+    (   restFile
+    ) where
 
 import Control.Applicative
 import Control.Monad
@@ -9,7 +11,7 @@ import Text.ParserCombinators.Parsec hiding ( many, optional, (<|>) )
 import Data.RestSpec hiding ( apiName )
 
 skipSpaces :: CharParser () (Maybe ())
-skipSpaces = optional $ skipMany1 space
+skipSpaces = optional $ skipMany space
 
 stringWithUnderscores :: CharParser () String
 stringWithUnderscores = many $ alphaNum <|> char '_'
@@ -28,15 +30,10 @@ groupOf p =
 
 -- | parses the contents of an entire REST API file:
 --
--- >> parse restFile "(test)" "Name: hello\n"
--- Right [RestSpec {apiName = ApiName "hello"}]
---
--- >> parse restFile "(test)" "Name hello\n"
--- Left "(test)" (line 1, column 1):
--- unexpected " "
--- expecting "Name: "
---
 -- >>> parse restFile "(test)" "`MyAPI` servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
+-- Right (RestSpec {apiName = ApiName "MyAPI", dataTypes = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]})
+--
+-- >>> parse restFile "(test)" "`MyAPI` servesDataTypes[data_name:data_type,data_name:ListOf list_element,data_name:ListOf onNewLine]"
 -- Right (RestSpec {apiName = ApiName "MyAPI", dataTypes = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]})
 --
 restFile :: CharParser () RestSpec
