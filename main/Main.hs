@@ -40,7 +40,7 @@ checkCoreFlagsAndRunMain opts args
     | otherwise             = appMain opts args
 
 main :: IO ()
-main = do 
+main = do
     (opts, args, errorMsgs) <- getOpt argOrder (coreOptions ++ options) `fmap` getArgs
     if null errorMsgs then
         checkCoreFlagsAndRunMain opts args
