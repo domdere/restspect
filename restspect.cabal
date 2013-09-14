@@ -66,6 +66,7 @@ executable              restdoc
     -- Other library packages from which modules are imported.
     build-depends:      base < 5 && >= 4
                         , parsec >= 3.1.3
+                        , polyparse >= 1.9
                         , text >= 0.11.3.1
                         , restspect
 
