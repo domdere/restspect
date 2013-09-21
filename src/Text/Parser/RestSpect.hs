@@ -1,14 +1,13 @@
-module Text.Parser.RestSpect
-    (   restFile
-    ) where
+module Text.Parser.RestSpect where
 
 import Control.Applicative
 import Control.Monad
--- import Data.Functor.Identity (Identity)
+import Data.Function
 import Data.Text
 import Text.ParserCombinators.Parsec hiding ( many, optional, (<|>) )
 
 import Data.RestSpec
+import Text.Parser.RestSpect.Expr
 
 skipSpaces :: CharParser () (Maybe ())
 skipSpaces = optional $ skipMany space
@@ -17,6 +16,9 @@ stringWithUnderscores :: CharParser () String
 stringWithUnderscores = (:) <$> charParser <*> many charParser
     where
         charParser = alphaNum <|> char '_'
+
+anythingBetween :: Char -> CharParser () String
+anythingBetween c = (between `on` char) c c $ many (notFollowedBy (char c) *> anyChar)
 
 listOf :: CharParser () a -> CharParser () [a]
 listOf p =
@@ -35,150 +37,150 @@ precedes str parser =
         (string str <* skipSpaces)
     *>  (skipSpaces *> parser)
 
--- | parses the contents of an entire REST API file:
+-- | Parses a DataName expression
 --
--- >>> parse restFile "(test)" "`MyAPI` servesDataTypes\n    [    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]\n    inResources\n    (   Person\n        [   Name\n        ,   Age\n        ,   Address\n        ]\n    )"
--- Right (RestSpec {apiNameOf = ApiName "MyAPI", dataTypesOf = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")], resourcesOf = [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age"),Member (DataTypeName "Address")]]})
---
--- >>> parse restFile "(test)" "`MyAPI` servesDataTypes[data_name:data_type,data_name:ListOf list_element,data_name:ListOf onNewLine] inResources (Person [Name, Age, Address])"
--- Right (RestSpec {apiNameOf = ApiName "MyAPI", dataTypesOf = [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")], resourcesOf = [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age"),Member (DataTypeName "Address")]]})
---
-restFile :: CharParser () RestSpec
-restFile =
-        RestSpec
-    <$> (skipSpaces *> apiName)
-    <*> (skipSpaces *> "servesDataTypes" `precedes` dataTypeListParser)
-    <*> (skipSpaces *> "inResources" `precedes` resourceList)
-
-
-apiName :: CharParser () ApiName
-apiName =
-        (ApiName . pack)
-    <$> (string "`" *> many alphaNum <* string "`")
-
--- | Parses a list of DataTypes.
---
--- >>> parse dataTypeListParser "(test)" "[data_name : data_type, data_name : ListOf list_element, data_name :\n   ListOf onNewLine]"
--- Right [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]
---
--- >>> parse dataTypeListParser "(test)" "[    data_name : data_type\n    ,    data_name : ListOf list_element\n    ,    data_name :\n   ListOf onNewLine\n    ]"
--- Right [DataType (DataTypeName "data_name") (SingleType "data_type"),DataType (DataTypeName "data_name") (ListType "list_element"),DataType (DataTypeName "data_name") (ListType "onNewLine")]
---
-dataTypeListParser :: CharParser () [DataType]
-dataTypeListParser = listOf dataType
-
--- | Parses a DataType
---
--- >>> parse dataType "(test)" "data_name : data_type"
--- Right (DataType (DataTypeName "data_name") (SingleType "data_type"))
---
--- >>> parse dataType "(test)" "data_name : ListOf list_element"
--- Right (DataType (DataTypeName "data_name") (ListType "list_element"))
---
--- >>> parse dataType "(test)" "data_name :\n   ListOf onNewLine"
--- Right (DataType (DataTypeName "data_name") (ListType "onNewLine"))
---
-dataType :: CharParser () DataType
-dataType = DataType
-    <$> (dataTypeName
-        <* (skipSpaces *> string ":"))
-    <*> (skipSpaces *> dataTypeType)
-
--- | Parses the Name of a DataType
---
--- >>> parse dataTypeName "(test)" "SomeName"
--- Right (DataTypeName "SomeName")
---
--- >>> parse dataTypeName "(test)" "  \nSomeName   "
--- Right (DataTypeName "SomeName")
---
-dataTypeName :: CharParser () DataTypeName
-dataTypeName = (DataTypeName . pack) <$> (skipSpaces *> stringWithUnderscores)
-
--- | Parses the Type of a DataType
---
--- >>> parse dataTypeType "(test)" "ListOf Apple"
--- Right (ListType "Apple")
---
--- >>> parse dataTypeType "(test)" "ListOf \n  \n Apple"
--- Right (ListType "Apple")
---
--- >>> parse dataTypeType "(test)" "Orange"
--- Right (SingleType "Orange")
---
--- >>> parse dataTypeType "(test)" "[]\n"
+-- >>> parse dataNameExpr "(test)" "  BadName"
 -- Left "(test)" (line 1, column 1):
--- unexpected "["
--- expecting "ListOf", space, letter or digit or "_"
+-- unexpected " "
+-- expecting letter or digit or "_"
 --
-dataTypeType :: CharParser () DataTypeType
-dataTypeType =
-        try ((ListType . pack)
-    <$> ((string "ListOf" *> skipSpaces) *> stringWithUnderscores))
-    <|> (SingleType . pack) <$> (skipSpaces *> stringWithUnderscores)
+-- >>> parse dataNameExpr "(test)" "GoodName"
+-- Right (DataNameExpr "GoodName")
+--
+-- >>> parse dataNameExpr "(test)" "GoodNameWithTrailingSpaces  \n  "
+-- Right (DataNameExpr "GoodNameWithTrailingSpaces")
+--
+dataNameExpr :: CharParser () DataNameExpr
+dataNameExpr = DataNameExpr <$> stringWithUnderscores <* skipSpaces
 
--- | Parse a resource member
+-- | Parses a URI expression
 --
--- >>> parse resourceMember "(test)" "Person"
--- Right (Member (DataTypeName "Person"))
---
--- >>> parse resourceMember "(test)" "ListOf Person"
--- Right (ListMember (DataTypeName "Person"))
---
--- >>> parse resourceMember "(test)" "  \nPerson  \n  "
--- Right (Member (DataTypeName "Person"))
---
--- >>> parse resourceMember "(test)" "ListOf  \n     Person  \n  "
--- Right (ListMember (DataTypeName "Person"))
---
-resourceMember :: CharParser () ResourceMember
-resourceMember = try (
-        ListMember
-    <$> ((string "ListOf" *> skipSpaces) *> dataTypeName))
-    <|> Member <$> (skipSpaces *> dataTypeName)
-
--- | Parse the name of a resource
---
--- >>> parse resourceName "(test)" "SomeName"
--- Right (ResourceName "SomeName")
---
--- >>> parse resourceName "(test)" "  \nSomeName   "
--- Right (ResourceName "SomeName")
---
-resourceName :: CharParser () ResourceName
-resourceName =
-        (ResourceName . pack)
-    <$> (skipSpaces *> stringWithUnderscores)
-
--- | Parses a Resource Type
---
--- >>> parse resource "(test)" "Person [Name, Age]"
--- Right (Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age")])
---
--- >>> parse resource "(test)" "[Name, Age]"
+-- >>> parse uriExpr "(test)" "  BadURI"
 -- Left "(test)" (line 1, column 1):
--- unexpected "["
--- expecting space, letter or digit or "_"
+-- unexpected " "
+-- expecting letter or digit or "_"
 --
-resource :: CharParser () Resource
-resource =
-        Resource
-    <$> resourceName
-    <*> (skipSpaces *> listOf resourceMember)
+-- >>> parse uriExpr "(test)" "GoodURI"
+-- Right (URIExpr "GoodURI")
+--
+-- >>> parse uriExpr "(test)" "GoodURIWithTrailingSpaces  \n  "
+-- Right (URIExpr "GoodURIWithTrailingSpaces")
+--
+uriExpr :: CharParser () URIExpr
+uriExpr = URIExpr <$> stringWithUnderscores <* skipSpaces
 
--- | Parses a List of Resources
+-- | Parses a Description expression
 --
--- >>> parse resourceList "(test)" "(Person [Name, Age], Friends [Name, ListOf Name])"
--- Right [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age")],Resource (ResourceName "Friends") [Member (DataTypeName "Name"),ListMember (DataTypeName "Name")]]
+-- >>> parse descriptionExpr "(test)" "  \n  BadDescription"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting letter or digit or "_"
 --
--- >>> parse resourceList "(test)" "(    Person [Name, Age]\n    ,   Friends [Name, ListOf Name]\n    )"
--- Right [Resource (ResourceName "Person") [Member (DataTypeName "Name"),Member (DataTypeName "Age")],Resource (ResourceName "Friends") [Member (DataTypeName "Name"),ListMember (DataTypeName "Name")]]
+-- >>> parse descriptionExpr "(test)" "GoodDescription"
+-- Right (DescriptionExpr "GoodDescription")
 --
-resourceList :: CharParser () [Resource]
-resourceList = groupOf resource
+-- >>> parse descriptionExpr "(test)" "GoodDescriptionWithTrailingSpaces  \n  "
+-- Right (DescriptionExpr "GoodDescriptionWithTrailingSpaces")
+--
+descriptionExpr :: CharParser () DescriptionExpr
+descriptionExpr = DescriptionExpr <$> stringWithUnderscores <* skipSpaces
 
-eol :: CharParser () String
-eol =   try (string "\n\r")
-    <|> try (string "\r\n")
-    <|> string "\n"
-    <|> string "\r"
+-- | Parses a Parameter Name Expression
+--
+-- >>> parse parameterNameExpr "(test)" "  \n  BadParameter"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting letter or digit or "_"
+--
+-- >>> parse parameterNameExpr "(test)" "GoodParameterName"
+-- Right (ParameterNameExpr "GoodParameterName")
+--
+-- >>> parse parameterNameExpr "(test)" "GoodParameterNameWithTrailingSpaces  \n  "
+-- Right (ParameterNameExpr "GoodParameterNameWithTrailingSpaces")
+--
+-- >>> parse parameterNameExpr "(test)" "GoodParameterNameWithTrailingSpaces  \n  AdditionalGuff"
+-- Right (ParameterNameExpr "GoodParameterNameWithTrailingSpaces")
+--
+parameterNameExpr :: CharParser () ParameterNameExpr
+parameterNameExpr =
+        ParameterNameExpr
+    <$> stringWithUnderscores
+    <*  skipSpaces
+
+-- | Parses a Parameter Description Expression
+--
+-- >>> parse parameterDescExpr "(test)" "  \n  BadParameterDesc"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting letter or digit or "_"
+--
+-- >>> parse parameterDescExpr "(test)" "GoodParameterDesc"
+-- Right (ParameterDescExpr "GoodParameterDesc")
+--
+-- >>> parse parameterDescExpr "(test)" "GoodParameterDescWithTrailingSpaces  \n  "
+-- Right (ParameterDescExpr "GoodParameterDescWithTrailingSpaces")
+--
+-- >>> parse parameterDescExpr "(test)" "GoodParameterDescWithTrailingSpaces  \n  AdditionalGuff"
+-- Right (ParameterDescExpr "GoodParameterDescWithTrailingSpaces")
+--
+parameterDescExpr :: CharParser () ParameterDescExpr
+parameterDescExpr =
+        ParameterDescExpr
+    <$> stringWithUnderscores
+    <*  skipSpaces
+
+-- | Parses an Error Expression
+--
+-- >>> parse errorDescExpr "(test)" "  \n  BadErrorDesc"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse errorDescExpr "(test)" "  \n 'BadErrorDesc'"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse errorDescExpr "(test)" "'GoodErrorDesc'"
+-- Right (ErrorDescExpr "GoodErrorDesc")
+--
+-- >>> parse errorDescExpr "(test)" "'GoodErrorDescWithTrailingSpaces'  \n  "
+-- Right (ErrorDescExpr "GoodErrorDescWithTrailingSpaces")
+--
+-- >>> parse errorDescExpr "(test)" "'GoodErrorDescWithTrailingSpaces  \n '  AdditionalGuff"
+-- Right (ErrorDescExpr "GoodErrorDescWithTrailingSpaces  \n ")
+--
+errorDescExpr :: CharParser () ErrorDescExpr
+errorDescExpr =
+        ErrorDescExpr <$>
+            ((  try (anythingBetween '\"')
+            <|> anythingBetween '\''
+            ) <* skipSpaces)
+
+-- | Parses a noteExpr
+--
+-- >>> parse noteExpr "(test)" "  \n  BadNote"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse noteExpr "(test)" " \n  'BadNote'"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse noteExpr "(test)" "\"GoodNote\""
+-- Right (NoteExpr "GoodNote")
+--
+-- >>> parse noteExpr "(test)" "\"GoodNoteWithTrailingSpaces\"  \n  "
+-- Right (NoteExpr "GoodNoteWithTrailingSpaces")
+--
+-- >>> parse noteExpr "(test)" "'GoodNoteWithTrailingSpaces  \n '  AdditionalGuff"
+-- Right (NoteExpr "GoodNoteWithTrailingSpaces  \n ")
+--
+noteExpr :: CharParser () NoteExpr
+noteExpr =
+        NoteExpr <$>
+            ((  try (anythingBetween '\"')
+            <|> anythingBetween '\''
+            ) <* skipSpaces)
