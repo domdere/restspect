@@ -20,6 +20,50 @@ stringWithUnderscores = (:) <$> charParser <*> many charParser
 anythingBetween :: Char -> CharParser () String
 anythingBetween c = (between `on` char) c c $ many (notFollowedBy (char c) *> anyChar)
 
+-- | Parses a String Literal
+--
+-- >>> parse stringLiteral "(test)" "  \n  BadLiteral"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse stringLiteral "(test)" " \n  'BadLiteral'"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse stringLiteral "(test)" "\"GoodLiteral\""
+-- Right "GoodLiteral"
+--
+-- >>> parse stringLiteral "(test)" "\"GoodLiteralWithTrailingSpaces\"  \n  "
+-- Right "GoodLiteralWithTrailingSpaces"
+--
+-- >>> parse stringLiteral "(test)" "'GoodLiteralWithTrailingSpaces  \n '  AdditionalGuff"
+-- Right "GoodLiteralWithTrailingSpaces  \n "
+--
+stringLiteral :: CharParser () String
+stringLiteral =
+    (   try (anythingBetween '\"')
+    <|> anythingBetween '\''
+    ) <* skipSpaces
+
+-- | Parses an alpha numeric string token (with underscores)
+-- and returns the string while dropping trailing spaces
+--
+-- >>> parse stringToken "(test)" "  BadName"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting letter or digit or "_"
+--
+-- >>> parse stringToken "(test)" "GoodName"
+-- Right "GoodName"
+--
+-- >>> parse stringToken "(test)" "GoodNameWithTrailingSpaces  \n  "
+-- Right "GoodNameWithTrailingSpaces"
+--
+stringToken :: CharParser () String
+stringToken = stringWithUnderscores <* skipSpaces
+
 listOf :: CharParser () a -> CharParser () [a]
 listOf p =
         string "["
@@ -51,7 +95,7 @@ precedes str parser =
 -- Right (DataNameExpr "GoodNameWithTrailingSpaces")
 --
 dataNameExpr :: CharParser () DataNameExpr
-dataNameExpr = DataNameExpr <$> stringWithUnderscores <* skipSpaces
+dataNameExpr = DataNameExpr <$> stringToken
 
 -- | Parses a URI expression
 --
@@ -67,23 +111,23 @@ dataNameExpr = DataNameExpr <$> stringWithUnderscores <* skipSpaces
 -- Right (URIExpr "GoodURIWithTrailingSpaces")
 --
 uriExpr :: CharParser () URIExpr
-uriExpr = URIExpr <$> stringWithUnderscores <* skipSpaces
+uriExpr = URIExpr <$> stringToken
 
 -- | Parses a Description expression
 --
 -- >>> parse descriptionExpr "(test)" "  \n  BadDescription"
 -- Left "(test)" (line 1, column 1):
 -- unexpected " "
--- expecting letter or digit or "_"
+-- expecting "\"" or "'"
 --
--- >>> parse descriptionExpr "(test)" "GoodDescription"
+-- >>> parse descriptionExpr "(test)" "'GoodDescription'"
 -- Right (DescriptionExpr "GoodDescription")
 --
--- >>> parse descriptionExpr "(test)" "GoodDescriptionWithTrailingSpaces  \n  "
+-- >>> parse descriptionExpr "(test)" "'GoodDescriptionWithTrailingSpaces'  \n  "
 -- Right (DescriptionExpr "GoodDescriptionWithTrailingSpaces")
 --
 descriptionExpr :: CharParser () DescriptionExpr
-descriptionExpr = DescriptionExpr <$> stringWithUnderscores <* skipSpaces
+descriptionExpr = DescriptionExpr <$> stringLiteral
 
 -- | Parses a Parameter Name Expression
 --
@@ -104,32 +148,53 @@ descriptionExpr = DescriptionExpr <$> stringWithUnderscores <* skipSpaces
 parameterNameExpr :: CharParser () ParameterNameExpr
 parameterNameExpr =
         ParameterNameExpr
-    <$> stringWithUnderscores
-    <*  skipSpaces
+    <$> stringToken
 
 -- | Parses a Parameter Description Expression
 --
 -- >>> parse parameterDescExpr "(test)" "  \n  BadParameterDesc"
 -- Left "(test)" (line 1, column 1):
 -- unexpected " "
--- expecting letter or digit or "_"
+-- expecting "\"" or "'"
 --
--- >>> parse parameterDescExpr "(test)" "GoodParameterDesc"
+-- >>> parse parameterDescExpr "(test)" "  \n  'BadParameterDesc'"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting "\"" or "'"
+--
+-- >>> parse parameterDescExpr "(test)" "'GoodParameterDesc'"
 -- Right (ParameterDescExpr "GoodParameterDesc")
 --
--- >>> parse parameterDescExpr "(test)" "GoodParameterDescWithTrailingSpaces  \n  "
+-- >>> parse parameterDescExpr "(test)" "'GoodParameterDescWithTrailingSpaces'  \n  "
 -- Right (ParameterDescExpr "GoodParameterDescWithTrailingSpaces")
 --
--- >>> parse parameterDescExpr "(test)" "GoodParameterDescWithTrailingSpaces  \n  AdditionalGuff"
--- Right (ParameterDescExpr "GoodParameterDescWithTrailingSpaces")
+-- >>> parse parameterDescExpr "(test)" "'GoodParameterDescWithTrailingSpaces  \n ' AdditionalGuff"
+-- Right (ParameterDescExpr "GoodParameterDescWithTrailingSpaces  \n ")
 --
 parameterDescExpr :: CharParser () ParameterDescExpr
-parameterDescExpr =
-        ParameterDescExpr
-    <$> stringWithUnderscores
+parameterDescExpr = ParameterDescExpr <$> stringLiteral
+
+-- | Parses an Error Code expression
+--
+-- >>> parse errorCodeExpr "(test)" "  non digit stuff"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting digit
+--
+-- >>> parse errorCodeExpr "(test)" "non digit stuff"
+-- Left "(test)" (line 1, column 1):
+-- unexpected "n"
+-- expecting digit
+--
+-- >>> parse errorCodeExpr "(test)" "404   \n "
+-- Right (ErrorCodeExpr 404)
+errorCodeExpr :: CharParser () ErrorCodeExpr
+errorCodeExpr =
+        (ErrorCodeExpr . read)
+    <$> many1 digit
     <*  skipSpaces
 
--- | Parses an Error Expression
+-- | Parses an Error Description Expression
 --
 -- >>> parse errorDescExpr "(test)" "  \n  BadErrorDesc"
 -- Left "(test)" (line 1, column 1):
@@ -151,11 +216,7 @@ parameterDescExpr =
 -- Right (ErrorDescExpr "GoodErrorDescWithTrailingSpaces  \n ")
 --
 errorDescExpr :: CharParser () ErrorDescExpr
-errorDescExpr =
-        ErrorDescExpr <$>
-            ((  try (anythingBetween '\"')
-            <|> anythingBetween '\''
-            ) <* skipSpaces)
+errorDescExpr = ErrorDescExpr <$> stringLiteral
 
 -- | Parses a noteExpr
 --
@@ -179,8 +240,4 @@ errorDescExpr =
 -- Right (NoteExpr "GoodNoteWithTrailingSpaces  \n ")
 --
 noteExpr :: CharParser () NoteExpr
-noteExpr =
-        NoteExpr <$>
-            ((  try (anythingBetween '\"')
-            <|> anythingBetween '\''
-            ) <* skipSpaces)
+noteExpr = NoteExpr <$> stringLiteral
