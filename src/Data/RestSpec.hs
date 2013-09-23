@@ -18,7 +18,7 @@ newtype DataTypeName = DataTypeName Text deriving (Show, Read, Eq, Ord)
 
 data DataTypeType = SingleType Text | ListType Text deriving (Show, Read, Eq, Ord)
 
-data DataType = DataType DataTypeName DataTypeType deriving (Show, Read, Eq, Ord)
+data DataType = DataTypeT DataTypeName DataTypeType deriving (Show, Read, Eq, Ord)
 
 data ResourceMember = Member DataTypeName | ListMember DataTypeName deriving (Show, Read, Eq, Ord)
 

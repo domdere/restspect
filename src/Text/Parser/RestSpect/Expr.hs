@@ -4,7 +4,7 @@ module Text.Parser.RestSpect.Expr where
 data ServiceExpr = ServiceExpr String [SpecExpr] deriving (Show, Eq)
 
 data SpecExpr =
-        DataType String RawTypeExpr
+        DataType DataTypeExpr
     |   ResourceType ResourceExpr
     |   URIMethod URIMethodExpr deriving (Show, Eq)
 

@@ -61,4 +61,5 @@ appMain _ args
         -- Will do the rest once the parsing is finished..
         handle <- openFile (head args) ReadMode
         contents <- hGetContents handle
-        either print print $ parse restFile (head args) contents
+        --either print print $ parse restFile (head args) contents
+        return ()

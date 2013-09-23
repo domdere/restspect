@@ -241,3 +241,100 @@ errorDescExpr = ErrorDescExpr <$> stringLiteral
 --
 noteExpr :: CharParser () NoteExpr
 noteExpr = NoteExpr <$> stringLiteral
+
+-- | Parses a Service Expression
+--
+-- >>> parse serviceExpr "(test)" "service ServiceName where"
+-- Right (ServiceExpr "ServiceName" [])
+--
+serviceExpr :: CharParser () ServiceExpr
+serviceExpr =
+        ServiceExpr
+    <$> ((string "service" <* skipSpaces) *> stringToken)
+    <*  skipSpaces
+    <*> ((string "where" <* skipSpaces) *> many specExpr)
+
+-- | Parses a Spec Expression
+--
+-- >>> parse specExpr "(test)" "datatype  typeName = Int"
+-- Right (DataType (DataTypeExpr "typeName" RawInt))
+--
+--data SpecExpr =
+--        DataType String RawTypeExpr
+--    |   ResourceType ResourceExpr
+--    |   URIMethod URIMethodExpr deriving (Show, Eq)
+specExpr :: CharParser () SpecExpr
+specExpr =
+        try (DataType <$> dataTypeExpr)
+    <|> try (ResourceType <$> resourceExpr)
+    <|> (URIMethod <$> uriMethodExpr)
+
+-- | Parses a datatype Expression
+--
+-- >>> parse dataTypeExpr "(test)" "datatype  typeName = Int"
+-- Right (DataTypeExpr "typeName" RawInt)
+--
+-- >>> parse dataTypeExpr "(test)" "datatype typeName = DateTime"
+-- Right (DataTypeExpr "typeName" RawDateTime)
+--
+-- >>> parse dataTypeExpr "(test)" "datatype  typeName = [Text]"
+-- Right (DataTypeExpr "typeName" (RawList RawText))
+--
+-- >>> parse dataTypeExpr "(test)" "dataype  typeName = [Text]"
+-- Left "(test)" (line 1, column 1):
+-- unexpected "y"
+-- expecting "datatype"
+--
+dataTypeExpr :: CharParser () DataTypeExpr
+dataTypeExpr = 
+        DataTypeExpr
+    <$> (string "datatype" *> skipSpaces *> dataNameExpr)
+    <*> (char '=' *> skipSpaces *> rawTypeExpr)
+
+-- | Parses a Resource Expr
+-- data ResourceExpr = ResourceExpr String ResourceSpecExpr deriving (Show, Eq)
+--
+resourceExpr :: CharParser () ResourceExpr
+resourceExpr = error "TODO"
+
+uriMethodExpr :: CharParser () URIMethodExpr
+uriMethodExpr = error "TODO"
+
+-- | Parses a RawType Expression
+--
+-- >>> parse rawTypeExpr "(test)" "Int"
+-- Right RawInt
+--
+-- >>> parse rawTypeExpr "(test)" "Float"
+-- Right Float
+--
+-- >>> parse rawTypeExpr "(test)" "DateTime"
+-- Right RawDateTime
+--
+-- >>> parse rawTypeExpr "(test)" "Text"
+-- Right RawText
+--
+-- >>> parse rawTypeExpr "(test)" "[Int]"
+-- Right (RawList RawInt)
+--
+-- >>> parse rawTypeExpr "(test)" "[Float]"
+-- Right (RawList RawFloat)
+--
+-- >>> parse rawTypeExpr "(test)" "[DateTime]"
+-- Right (RawList RawDateTime)
+--
+-- >>> parse rawTypeExpr "(test)" "[Text]"
+-- Right (RawList RawText)
+--
+-- >>> parse rawTypeExpr "(test)" "AnythingElse"
+-- Left "(test)" (line 1, column 1):
+-- unexpected "A"
+-- expecting "Int", "Float", "DateTime", "Text" or "["
+--
+rawTypeExpr :: CharParser () RawTypeExpr
+rawTypeExpr =
+        try (string "Int" *> return RawInt)
+    <|> try (string "Float" *> return RawFloat)
+    <|> try (string "DateTime" *> return RawDateTime)
+    <|> try (string "Text" *> return RawText)
+    <|> RawList <$> (between `on` char) '[' ']' rawTypeExpr
