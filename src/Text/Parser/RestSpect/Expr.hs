@@ -8,9 +8,18 @@ data SpecExpr =
     |   ResourceType ResourceExpr
     |   URIMethod URIMethodExpr deriving (Show, Eq)
 
-data ResourceExpr = ResourceExpr String ResourceSpecExpr deriving (Show, Eq)
+data ResourceExpr = ResourceExpr ResourceNameExpr ResourceSpecExpr deriving (Show, Eq)
 
-data ResourceSpecExpr = ResourceSpecExpr [DataNameExpr] deriving (Show, Eq)
+newtype ResourceNameExpr = ResourceNameExpr String deriving (Show, Eq)
+
+data ResourceSpecExpr = ResourceSpecExpr [DataMemberExpr] deriving (Show, Eq)
+
+data DataMemberExpr =
+    DataMemberExpr
+        MemberNameExpr
+        DerivedResourceSpecExpr deriving (Show, Eq)
+
+newtype MemberNameExpr = MemberNameExpr String deriving (Show, Eq)
 
 data DerivedResourceSpecExpr =
         Named DataNameExpr

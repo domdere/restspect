@@ -64,17 +64,52 @@ stringLiteral =
 stringToken :: CharParser () String
 stringToken = stringWithUnderscores <* skipSpaces
 
-listOf :: CharParser () a -> CharParser () [a]
-listOf p =
-        string "["
-    *>  (p <* skipSpaces) `sepBy` (string "," <* skipSpaces)
-    <*  string "]"
+-- | parses a list of things enclosed by open and close and
+-- seperated by sep
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "[Dom, Jot]"
+-- Right ["Dom","Jot"]
+--
+-- >>> parse (listOf '{' '}' '|' stringToken) "(test)" "{Dom | Jot}"
+-- Right ["Dom","Jot"]
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "{Dom | Jot}"
+-- Left "(test)" (line 1, column 1):
+-- unexpected "{"
+-- expecting "["
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "[Dom | Jot}"
+-- Left "(test)" (line 1, column 6):
+-- unexpected "|"
+-- expecting space, "," or "]"
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "[| Jot}"
+-- Left "(test)" (line 1, column 2):
+-- unexpected "|"
+-- expecting space, letter or digit, "_" or "]"
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "[Dom, Jot}"
+-- Left "(test)" (line 1, column 10):
+-- unexpected "}"
+-- expecting "," or "]"
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "[, Dom]"
+-- Left "(test)" (line 1, column 2):
+-- unexpected ","
+-- expecting space, letter or digit, "_" or "]"
+--
+-- >>> parse (listOf '[' ']' ',' stringToken) "(test)" "[Dom,]"
+-- Left "(test)" (line 1, column 6):
+-- unexpected "]"
+-- expecting space, letter or digit or "_"
+--
+listOf :: Char -> Char -> Char -> CharParser () a -> CharParser () [a]
+listOf open close sep p =
+        (between `on` char) open close
+    (   skipSpaces
+    *>  ((p <* skipSpaces) `sepBy` (char sep <* skipSpaces))
+    ) <* skipSpaces
 
-groupOf :: CharParser () a -> CharParser () [a]
-groupOf p =
-        string "("
-    *>  (p <* skipSpaces) `sepBy` (string "," <* skipSpaces)
-    <*  (skipSpaces *> string ")")
 
 precedes :: String -> CharParser () a -> CharParser () a
 precedes str parser =
@@ -257,12 +292,8 @@ serviceExpr =
 -- | Parses a Spec Expression
 --
 -- >>> parse specExpr "(test)" "datatype  typeName = Int"
--- Right (DataType (DataTypeExpr "typeName" RawInt))
+-- Right (DataType (DataTypeExpr (DataNameExpr "typeName") RawInt))
 --
---data SpecExpr =
---        DataType String RawTypeExpr
---    |   ResourceType ResourceExpr
---    |   URIMethod URIMethodExpr deriving (Show, Eq)
 specExpr :: CharParser () SpecExpr
 specExpr =
         try (DataType <$> dataTypeExpr)
@@ -272,13 +303,13 @@ specExpr =
 -- | Parses a datatype Expression
 --
 -- >>> parse dataTypeExpr "(test)" "datatype  typeName = Int"
--- Right (DataTypeExpr "typeName" RawInt)
+-- Right (DataTypeExpr (DataNameExpr "typeName") RawInt)
 --
 -- >>> parse dataTypeExpr "(test)" "datatype typeName = DateTime"
--- Right (DataTypeExpr "typeName" RawDateTime)
+-- Right (DataTypeExpr (DataNameExpr "typeName") RawDateTime)
 --
 -- >>> parse dataTypeExpr "(test)" "datatype  typeName = [Text]"
--- Right (DataTypeExpr "typeName" (RawList RawText))
+-- Right (DataTypeExpr (DataNameExpr "typeName") (RawList RawText))
 --
 -- >>> parse dataTypeExpr "(test)" "dataype  typeName = [Text]"
 -- Left "(test)" (line 1, column 1):
@@ -286,16 +317,73 @@ specExpr =
 -- expecting "datatype"
 --
 dataTypeExpr :: CharParser () DataTypeExpr
-dataTypeExpr = 
+dataTypeExpr =
         DataTypeExpr
     <$> (string "datatype" *> skipSpaces *> dataNameExpr)
     <*> (char '=' *> skipSpaces *> rawTypeExpr)
 
--- | Parses a Resource Expr
--- data ResourceExpr = ResourceExpr String ResourceSpecExpr deriving (Show, Eq)
+-- | Parses a Resource Name Expressions
+--
+resourceNameExpr :: CharParser () ResourceNameExpr
+resourceNameExpr = ResourceNameExpr <$> stringToken
+
+-- | Parses a Data Member Name Expression
+--
+memberNameExpr :: CharParser () MemberNameExpr
+memberNameExpr = MemberNameExpr <$> stringToken
+
+-- | Parses a Resource Expression
+--
+-- >>> parse resourceExpr "(test)" "resource Person = {name: Name, age: Age}"
+-- Right (ResourceExpr (ResourceNameExpr "Person") (ResourceSpecExpr [DataMemberExpr (MemberNameExpr "name") (Named (DataNameExpr "Name")),DataMemberExpr (MemberNameExpr "age") (Named (DataNameExpr "Age"))]))
 --
 resourceExpr :: CharParser () ResourceExpr
-resourceExpr = error "TODO"
+resourceExpr =
+        ResourceExpr
+    <$> (string "resource" *> skipSpaces *> resourceNameExpr)
+    <*> (char '=' *> skipSpaces *> resourceSpecExpr)
+
+-- | Parses a Resource Spec Expression
+--
+-- >>> parse resourceSpecExpr "(test)" "{name: Name, age: Age}"
+-- Right (ResourceSpecExpr [DataMemberExpr (MemberNameExpr "name") (Named (DataNameExpr "Name")),DataMemberExpr (MemberNameExpr "age") (Named (DataNameExpr "Age"))])
+--
+-- >>> parse resourceSpecExpr "(test)" "{names: [Name], age: Age}"
+-- Right (ResourceSpecExpr [DataMemberExpr (MemberNameExpr "names") (ListOf (Named (DataNameExpr "Name"))),DataMemberExpr (MemberNameExpr "age") (Named (DataNameExpr "Age"))])
+--
+-- >>> parse resourceSpecExpr "(test)" "{names: [Name], age: {age_rel_to_jane: Duration, janes_age: Age} }"
+-- Right (ResourceSpecExpr [DataMemberExpr (MemberNameExpr "names") (ListOf (Named (DataNameExpr "Name"))),DataMemberExpr (MemberNameExpr "age") (Anonymous (ResourceSpecExpr [DataMemberExpr (MemberNameExpr "age_rel_to_jane") (Named (DataNameExpr "Duration")),DataMemberExpr (MemberNameExpr "janes_age") (Named (DataNameExpr "Age"))]))])
+--
+resourceSpecExpr :: CharParser () ResourceSpecExpr
+resourceSpecExpr = ResourceSpecExpr <$> listOf '{' '}' ',' dataMemberExpr
+
+-- | Parses a Data Member Expression
+--
+-- >>> parse dataMemberExpr "(test)" "name: Name"
+-- Right (DataMemberExpr (MemberNameExpr "name") (Named (DataNameExpr "Name")))
+--
+dataMemberExpr :: CharParser () DataMemberExpr
+dataMemberExpr =
+        DataMemberExpr
+    <$> memberNameExpr
+    <*> (char ':' *> skipSpaces *> derivedResourceSpecExpr)
+
+-- | Parses a Derived Resource Spec Expression
+--
+-- >>> parse derivedResourceSpecExpr "(test)" "HelloWorld"
+-- Right (Named (DataNameExpr "HelloWorld"))
+--
+-- >>> parse derivedResourceSpecExpr "(test)" "[HelloWorld]"
+-- Right (ListOf (Named (DataNameExpr "HelloWorld")))
+--
+-- >>> parse derivedResourceSpecExpr "(test)" "{hello: World}"
+-- Right (Anonymous (ResourceSpecExpr [DataMemberExpr (MemberNameExpr "hello") (Named (DataNameExpr "World"))]))
+--
+derivedResourceSpecExpr :: CharParser () DerivedResourceSpecExpr
+derivedResourceSpecExpr =
+        try (ListOf <$> (between `on` char) '[' ']' derivedResourceSpecExpr)
+    <|> try (Anonymous <$> resourceSpecExpr)
+    <|> Named <$> dataNameExpr
 
 uriMethodExpr :: CharParser () URIMethodExpr
 uriMethodExpr = error "TODO"
@@ -306,7 +394,7 @@ uriMethodExpr = error "TODO"
 -- Right RawInt
 --
 -- >>> parse rawTypeExpr "(test)" "Float"
--- Right Float
+-- Right RawFloat
 --
 -- >>> parse rawTypeExpr "(test)" "DateTime"
 -- Right RawDateTime
