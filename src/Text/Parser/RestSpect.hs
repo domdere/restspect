@@ -1,4 +1,6 @@
-module Text.Parser.RestSpect where
+module Text.Parser.RestSpect
+    ( restFile
+    ) where
 
 import Control.Applicative
 import Control.Monad
@@ -12,8 +14,16 @@ import Text.Parser.RestSpect.Expr
 skipSpaces :: CharParser () (Maybe ())
 skipSpaces = optional $ skipMany space
 
+-- | parses a string with underscore characters included
+--
+-- >>> parse stringWithUnderscores "(test)" "blah_bl\ah"
+-- Right "blah_bl"
+--
+-- >>> parse stringWithUnderscores "(test)" "blah_blah"
+-- Right "blah_blah"
+--
 stringWithUnderscores :: CharParser () String
-stringWithUnderscores = (:) <$> charParser <*> many charParser
+stringWithUnderscores = many1 charParser
     where
         charParser = alphaNum <|> char '_'
 
@@ -63,6 +73,35 @@ stringLiteral =
 --
 stringToken :: CharParser () String
 stringToken = stringWithUnderscores <* skipSpaces
+
+-- | Parses a URI token (an alpha numeric
+-- string with '/'s, '%'s, '?'s, '&'s)
+-- and returns the string while dropping trailing spaces
+--
+-- >>> parse uriToken "(test)" "  Bad/URL"
+-- Left "(test)" (line 1, column 1):
+-- unexpected " "
+-- expecting letter or digit, "_", "-", "/", "?", "&", "%" or "="
+--
+-- >>> parse uriToken "(test)" "Good/url"
+-- Right "Good/url"
+--
+-- >>> parse uriToken "(test)" "Good/Name/With/Trailing/%20Spaces?x=1&y=2  \n  "
+-- Right "Good/Name/With/Trailing/%20Spaces?x=1&y=2"
+--
+uriToken :: CharParser () String
+uriToken = many1 uriCharParser <* skipSpaces
+    where
+        uriCharParser :: CharParser () Char
+        uriCharParser =
+                try alphaNum
+            <|> try (char '_')
+            <|> try (char '-')
+            <|> try (char '/')
+            <|> try (char '?')
+            <|> try (char '&')
+            <|> try (char '%')
+            <|> char '='
 
 -- | parses a list of things enclosed by open and close and
 -- seperated by sep
@@ -137,7 +176,7 @@ dataNameExpr = DataNameExpr <$> stringToken
 -- >>> parse uriExpr "(test)" "  BadURI"
 -- Left "(test)" (line 1, column 1):
 -- unexpected " "
--- expecting letter or digit or "_"
+-- expecting letter or digit, "_", "-", "/", "?", "&", "%" or "="
 --
 -- >>> parse uriExpr "(test)" "GoodURI"
 -- Right (URIExpr "GoodURI")
@@ -146,7 +185,7 @@ dataNameExpr = DataNameExpr <$> stringToken
 -- Right (URIExpr "GoodURIWithTrailingSpaces")
 --
 uriExpr :: CharParser () URIExpr
-uriExpr = URIExpr <$> stringToken
+uriExpr = URIExpr <$> uriToken
 
 -- | Parses a Description expression
 --
@@ -277,6 +316,10 @@ errorDescExpr = ErrorDescExpr <$> stringLiteral
 noteExpr :: CharParser () NoteExpr
 noteExpr = NoteExpr <$> stringLiteral
 
+-- | Parses a restFile
+restFile :: CharParser () ServiceExpr
+restFile = skipSpaces *> serviceExpr
+
 -- | Parses a Service Expression
 --
 -- >>> parse serviceExpr "(test)" "service ServiceName where"
@@ -296,9 +339,10 @@ serviceExpr =
 --
 specExpr :: CharParser () SpecExpr
 specExpr =
-        try (DataType <$> dataTypeExpr)
+    (   try (DataType <$> dataTypeExpr)
     <|> try (ResourceType <$> resourceExpr)
     <|> (URIMethod <$> uriMethodExpr)
+    ) <* skipSpaces
 
 -- | Parses a datatype Expression
 --
@@ -385,8 +429,216 @@ derivedResourceSpecExpr =
     <|> try (Anonymous <$> resourceSpecExpr)
     <|> Named <$> dataNameExpr
 
+-- | Parses a URIMethodExpr
+--
+-- >>> parse uriMethodExpr "(test)" "GET /persons/: Returns: Person in JSON end"
+-- Right (URIMethodExpr Get (URIExpr "/persons/") [Return (RepresentationExpr (Named (DataNameExpr "Person")) Json)])
+--
 uriMethodExpr :: CharParser () URIMethodExpr
-uriMethodExpr = error "TODO"
+uriMethodExpr =
+        URIMethodExpr
+    <$> methodExpr
+    <*> (uriExpr <* char ':' <* skipSpaces)
+    <*> uriPropertyExpr `manyTill` string "end"
+
+-- | Parses a MethodExpr
+--
+-- >>> parse methodExpr "(test)" "invalid"
+-- Left "(test)" (line 1, column 1):
+-- unexpected "i"
+-- expecting "GET", "POST", "PUT" or "DELETE"
+--
+-- >>> parse methodExpr "(test)" "GET"
+-- Right Get
+--
+-- >>> parse methodExpr "(test)" "POST"
+-- Right Post
+--
+-- >>> parse methodExpr "(test)" "PUT"
+-- Right Put
+--
+-- >>> parse methodExpr "(test)" "DELETE"
+-- Right Delete
+--
+methodExpr :: CharParser () MethodExpr
+methodExpr =
+    (   try (string "GET" *> return Get)
+    <|> try (string "POST" *> return Post)
+    <|> try (string "PUT" *> return Put)
+    <|> string "DELETE" *> return Delete
+    ) <* skipSpaces
+
+-- | Parses a URIPropertyExpr
+--
+-- >>> parse uriPropertyExpr "(test)" "Returns: Something in XML"
+-- Right (Return (RepresentationExpr (Named (DataNameExpr "Something")) Xml))
+--
+-- >>> parse uriPropertyExpr "(test)" "Description:   \n  \"A Description\"  "
+-- Right (Description (DescriptionExpr "A Description"))
+--
+-- >>> parse uriPropertyExpr "(test)" "Parameters: param1: \"The first parameter\" \n   param2 : \"The second parameter\""
+-- Right (Parameters [ParameterExpr (ParameterNameExpr "param1") (ParameterDescExpr "The first parameter"),ParameterExpr (ParameterNameExpr "param2") (ParameterDescExpr "The second parameter")])
+--
+-- >>> parse uriPropertyExpr "(test)" "Body: SomethingElse in JSON"
+-- Right (Body (RepresentationExpr (Named (DataNameExpr "SomethingElse")) Json))
+--
+-- >>> parse uriPropertyExpr "(test)" "Errors: 404: \"Not Found.\""
+-- Right (Errors [ErrorExpr (ErrorCodeExpr 404) (ErrorDescExpr "Not Found.")])
+--
+-- >>> parse uriPropertyExpr "(test)" "Notes: \"Something Strange\""
+-- Right (Notes (NoteExpr "Something Strange"))
+--
+uriPropertyExpr :: CharParser () URIPropertyExpr
+uriPropertyExpr =
+    (   try returnLine
+    <|> try descriptionLine
+    <|> try parametersLine
+    <|> try bodyLine
+    <|> try errorsLine
+    <|> notesLine
+    ) <* skipSpaces
+
+-- | Parses a Return Expr
+--
+-- >>> parse returnLine "(test)" "Returns: Something in XML"
+-- Right (Return (RepresentationExpr (Named (DataNameExpr "Something")) Xml))
+--
+returnLine :: CharParser () URIPropertyExpr
+returnLine = Return <$>
+    (   string "Returns"
+    *>  skipSpaces
+    *>  char ':'
+    *>  skipSpaces
+    *>  representationExpr)
+
+-- | Parses a Description URIPropertyExpr
+--
+-- >>> parse descriptionLine "(test)" "Description:   \n  \"A Description\"  "
+-- Right (Description (DescriptionExpr "A Description"))
+--
+descriptionLine :: CharParser () URIPropertyExpr
+descriptionLine = Description <$>
+    (   string "Description"
+    *>  skipSpaces
+    *>  char ':'
+    *>  skipSpaces
+    *>  descriptionExpr
+    )
+
+-- | Parses a parameter URIPropertyExpr
+--
+-- >>> parse parametersLine "(test)" "Parameters: param1: \"The first parameter\" \n   param2 : \"The second parameter\""
+-- Right (Parameters [ParameterExpr (ParameterNameExpr "param1") (ParameterDescExpr "The first parameter"),ParameterExpr (ParameterNameExpr "param2") (ParameterDescExpr "The second parameter")])
+--
+parametersLine :: CharParser () URIPropertyExpr
+parametersLine = Parameters <$>
+    (   string "Parameters"
+    *>  skipSpaces
+    *>  char ':'
+    *>  skipSpaces
+    *>  many1 parameterExpr
+    )
+
+-- | Parses a Body URIPropertyExpr
+--
+-- >>> parse bodyLine "(test)" "Body: SomethingElse in JSON"
+-- Right (Body (RepresentationExpr (Named (DataNameExpr "SomethingElse")) Json))
+--
+bodyLine :: CharParser () URIPropertyExpr
+bodyLine = Body <$>
+    (   string "Body"
+    *>  skipSpaces
+    *>  char ':'
+    *>  skipSpaces
+    *>  representationExpr)
+
+
+-- | Parses an error URIPropertyExpr
+--
+-- >>> parse errorsLine "(test)" "Errors: 404: \"The first error\" \n   401 : \"The other error\""
+-- Right (Errors [ErrorExpr (ErrorCodeExpr 404) (ErrorDescExpr "The first error"),ErrorExpr (ErrorCodeExpr 401) (ErrorDescExpr "The other error")])
+--
+errorsLine :: CharParser () URIPropertyExpr
+errorsLine = Errors <$>
+    (   string "Errors"
+    *>  skipSpaces
+    *>  char ':'
+    *>  skipSpaces
+    *>  many1 errorExpr
+    )
+
+-- | Parses a Notes Line
+--
+-- >>> parse notesLine "(test)" "Notes: \"Something Strange\""
+-- Right (Notes (NoteExpr "Something Strange"))
+--
+notesLine :: CharParser () URIPropertyExpr
+notesLine = Notes <$>
+    (   string "Notes"
+    *>  skipSpaces
+    *>  char ':'
+    *>  skipSpaces
+    *>  noteExpr
+    )
+
+-- | Parses a RepresentationExpr
+--
+representationExpr :: CharParser () RepresentationExpr
+representationExpr =
+        try (string "Nothing" *> return None)
+    <|> (   RepresentationExpr
+        <$> derivedResourceSpecExpr
+        <*> formatExpr)
+
+-- | Parses a FormatExpr
+--
+-- >>> parse formatExpr "(test)" "in JSON"
+-- Right Json
+--
+-- >>> parse formatExpr "(test)" "in XML"
+-- Right Xml
+--
+-- >>> parse formatExpr "(test)" "in BSON"
+-- Right Bson
+--
+formatExpr :: CharParser () FormatExpr
+formatExpr = string "in" *> skipSpaces *>
+    (   try (string "JSON" *> return Json)
+    <|> try (string "XML" *> return Xml)
+    <|> try (string "BSON" *> return Bson)
+    ) <* skipSpaces
+
+-- | Parses a ParameterExpr
+--
+-- >>> parse parameterExpr "(test)" "id : \"The ID for the resource\""
+-- Right (ParameterExpr (ParameterNameExpr "id") (ParameterDescExpr "The ID for the resource"))
+--
+parameterExpr :: CharParser () ParameterExpr
+parameterExpr =
+    (   ParameterExpr
+    <$> (   parameterNameExpr
+        <*  skipSpaces
+        <*  char ':'
+        <*  skipSpaces
+        )
+    <*> parameterDescExpr
+    ) <* skipSpaces
+
+-- | parses an ErrorExpr
+--
+-- >>> parse errorExpr "(test)" "404 : \"not found\""
+-- Right (ErrorExpr (ErrorCodeExpr 404) (ErrorDescExpr "not found"))
+--
+errorExpr :: CharParser () ErrorExpr
+errorExpr =
+    (   ErrorExpr
+    <$> (   errorCodeExpr
+        <*  skipSpaces
+        <*  char ':'
+        <*  skipSpaces
+        )
+    <*> errorDescExpr
+    ) <* skipSpaces
 
 -- | Parses a RawType Expression
 --

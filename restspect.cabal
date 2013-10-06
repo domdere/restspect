@@ -42,6 +42,7 @@ library
 
     exposed-modules:    Data.RestSpec
                         Text.Parser.RestSpect
+                        Text.Parser.RestSpect.Expr
 
 executable              restdoc
     default-language:   Haskell2010

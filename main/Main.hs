@@ -10,7 +10,7 @@ import Text.Parser.RestSpect
 data CommandLineOption = Help | Version deriving (Show, Eq)
 
 coreOptions :: [OptDescr CommandLineOption]
-coreOptions = 
+coreOptions =
     [   Option "h?" ["help"]    (NoArg Help)    "print this usage message"
     ,   Option "V"  ["version"] (NoArg Version) "output the version"
     ]
@@ -61,5 +61,5 @@ appMain _ args
         -- Will do the rest once the parsing is finished..
         handle <- openFile (head args) ReadMode
         contents <- hGetContents handle
-        --either print print $ parse restFile (head args) contents
+        either print print $ parse restFile (head args) contents
         return ()

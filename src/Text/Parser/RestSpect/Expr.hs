@@ -56,7 +56,7 @@ newtype DescriptionExpr = DescriptionExpr String deriving (Show, Eq)
 
 data RepresentationExpr =
         None
-    |   RepresentationExpr ResourceSpecExpr FormatExpr deriving (Show, Eq)
+    |   RepresentationExpr DerivedResourceSpecExpr FormatExpr deriving (Show, Eq)
 
 newtype ParameterNameExpr = ParameterNameExpr String deriving (Show, Eq)
 
