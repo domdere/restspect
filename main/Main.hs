@@ -26,7 +26,7 @@ usageString :: String
 usageString = "Usage: restdoc [OPTIONS] filename"
 
 versionString :: String
-versionString = "restdoc: 0.0.1"
+versionString = "restdoc: 0.1.0"
 
 usageMsg :: String
 usageMsg = usageInfo usageString (coreOptions ++ options)
@@ -54,7 +54,7 @@ main = do
 appMain :: [a] -> [String] -> IO ()
 appMain _ args
     | length args /= 1 = do
-        putStrLn $ "Error: Expected 1 argument, got " ++ show (length args) ++ "instead"
+        putStrLn $ "Error: Expected 1 argument, got " ++ show (length args) ++ " instead"
         printUsageMsg
     | otherwise = do
         -- for now all this does is load up the .rest file and try to parse it,

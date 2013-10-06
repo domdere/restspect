@@ -26,17 +26,20 @@ POST /person/ :
     Parameters : None
     Body : Person in JSON
     Errors :
-        400 : "The Client has sent an incorrect representation."
+        [   400 : "The Client has sent an incorrect representation."
+        ]
     Notes : "Still Nothing."
 end
 
-GET /person/{id}
+GET /person/{id} :
     Returns : Person in JSON
     Description : "Retrieves the Person resource with the given id."
     Parameters :
-        id : "The ID for the desired Person resource"
+        [   id : "The ID for the desired Person resource"
+        ]
     Errors :
-        404 : "If no Person exists with that ID"
+        [   404 : "If no Person exists with that ID"
+        ]
     Notes : "Nothing Again.."
 end
 
@@ -44,14 +47,16 @@ PUT /person/{id}:
     Returns : Person in JSON
     Description : "Updates the Address or Age for the specified Person"
     Parameters :
-        id : "The ID for the desired Person resource"
+        [   id : "The ID for the desired Person resource"
+        ]
 
     Body :
         {   age : Age
         ,   address : Address
         } in JSON
     Errors :
-        400 : "No Person exists with the given ID"
+        [   400 : "No Person exists with the given ID"
+        ]
 
     Notes : "Names are not allowed to change."
 end
@@ -60,15 +65,16 @@ DELETE /person/{id}:
     Returns : Nothing
     Description : "Deletes a Person"
     Parameters :
-        id : "The ID for the desired Person resource"
-
+        [   id : "The ID for the desired Person resource"
+        ]
     Body :
         {   age : Age
         ,   address : Address
         } in JSON
 
     Errors :
-        400 : "No Person exists with the given ID"
+        [   400 : "No Person exists with the given ID"
+        ]
 
     Notes : "Names are not allowed to change."
 end

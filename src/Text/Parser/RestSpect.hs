@@ -81,7 +81,7 @@ stringToken = stringWithUnderscores <* skipSpaces
 -- >>> parse uriToken "(test)" "  Bad/URL"
 -- Left "(test)" (line 1, column 1):
 -- unexpected " "
--- expecting letter or digit, "_", "-", "/", "?", "&", "%" or "="
+-- expecting letter or digit, "_", "-", "/", "?", "&", "%", "{", "}" or "="
 --
 -- >>> parse uriToken "(test)" "Good/url"
 -- Right "Good/url"
@@ -101,6 +101,8 @@ uriToken = many1 uriCharParser <* skipSpaces
             <|> try (char '?')
             <|> try (char '&')
             <|> try (char '%')
+            <|> try (char '{')
+            <|> try (char '}')
             <|> char '='
 
 -- | parses a list of things enclosed by open and close and
@@ -176,7 +178,7 @@ dataNameExpr = DataNameExpr <$> stringToken
 -- >>> parse uriExpr "(test)" "  BadURI"
 -- Left "(test)" (line 1, column 1):
 -- unexpected " "
--- expecting letter or digit, "_", "-", "/", "?", "&", "%" or "="
+-- expecting letter or digit, "_", "-", "/", "?", "&", "%", "{", "}" or "="
 --
 -- >>> parse uriExpr "(test)" "GoodURI"
 -- Right (URIExpr "GoodURI")
@@ -538,7 +540,7 @@ parametersLine = Parameters <$>
     *>  char ':'
     *>  skipSpaces
     *>  (   try (string "None" *> return [])
-        <|> many1 parameterExpr
+        <|> listOf '[' ']' ',' parameterExpr
         )
     )
 
@@ -568,7 +570,7 @@ errorsLine = Errors <$>
     *>  char ':'
     *>  skipSpaces
     *>  (   try (string "None" *> return [])
-        <|> many1 errorExpr
+        <|> listOf '[' ']' ',' errorExpr
         )
     )
 
