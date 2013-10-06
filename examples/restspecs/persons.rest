@@ -13,7 +13,7 @@ resource Person =
     }
 
 GET /person/ :
-    Returns : ListOf Person in JSON
+    Returns : [Person] in JSON
     Description : "Gets the list of Persons stored on the server"
     Parameters : None
     Errors : None
@@ -28,6 +28,7 @@ POST /person/ :
     Errors :
         400 : "The Client has sent an incorrect representation."
     Notes : "Still Nothing."
+end
 
 GET /person/{id}
     Returns : Person in JSON
@@ -37,7 +38,7 @@ GET /person/{id}
     Errors :
         404 : "If no Person exists with that ID"
     Notes : "Nothing Again.."
-End
+end
 
 PUT /person/{id}:
     Returns : Person in JSON
@@ -53,7 +54,7 @@ PUT /person/{id}:
         400 : "No Person exists with the given ID"
 
     Notes : "Names are not allowed to change."
-End
+end
 
 DELETE /person/{id}:
     Returns : Nothing
@@ -70,5 +71,5 @@ DELETE /person/{id}:
         400 : "No Person exists with the given ID"
 
     Notes : "Names are not allowed to change."
-End
+end
 

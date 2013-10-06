@@ -425,9 +425,10 @@ dataMemberExpr =
 --
 derivedResourceSpecExpr :: CharParser () DerivedResourceSpecExpr
 derivedResourceSpecExpr =
-        try (ListOf <$> (between `on` char) '[' ']' derivedResourceSpecExpr)
+    (   try (ListOf <$> (between `on` char) '[' ']' derivedResourceSpecExpr)
     <|> try (Anonymous <$> resourceSpecExpr)
     <|> Named <$> dataNameExpr
+    ) <* skipSpaces
 
 -- | Parses a URIMethodExpr
 --
@@ -536,7 +537,9 @@ parametersLine = Parameters <$>
     *>  skipSpaces
     *>  char ':'
     *>  skipSpaces
-    *>  many1 parameterExpr
+    *>  (   try (string "None" *> return [])
+        <|> many1 parameterExpr
+        )
     )
 
 -- | Parses a Body URIPropertyExpr
@@ -564,7 +567,9 @@ errorsLine = Errors <$>
     *>  skipSpaces
     *>  char ':'
     *>  skipSpaces
-    *>  many1 errorExpr
+    *>  (   try (string "None" *> return [])
+        <|> many1 errorExpr
+        )
     )
 
 -- | Parses a Notes Line
