@@ -479,13 +479,13 @@ methodExpr =
 -- >>> parse uriPropertyExpr "(test)" "Description:   \n  \"A Description\"  "
 -- Right (Description (DescriptionExpr "A Description"))
 --
--- >>> parse uriPropertyExpr "(test)" "Parameters: param1: \"The first parameter\" \n   param2 : \"The second parameter\""
+-- >>> parse uriPropertyExpr "(test)" "Parameters: [param1: \"The first parameter\" \n,   param2 : \"The second parameter\"]"
 -- Right (Parameters [ParameterExpr (ParameterNameExpr "param1") (ParameterDescExpr "The first parameter"),ParameterExpr (ParameterNameExpr "param2") (ParameterDescExpr "The second parameter")])
 --
 -- >>> parse uriPropertyExpr "(test)" "Body: SomethingElse in JSON"
 -- Right (Body (RepresentationExpr (Named (DataNameExpr "SomethingElse")) Json))
 --
--- >>> parse uriPropertyExpr "(test)" "Errors: 404: \"Not Found.\""
+-- >>> parse uriPropertyExpr "(test)" "Errors: [404: \"Not Found.\"]"
 -- Right (Errors [ErrorExpr (ErrorCodeExpr 404) (ErrorDescExpr "Not Found.")])
 --
 -- >>> parse uriPropertyExpr "(test)" "Notes: \"Something Strange\""
@@ -530,7 +530,7 @@ descriptionLine = Description <$>
 
 -- | Parses a parameter URIPropertyExpr
 --
--- >>> parse parametersLine "(test)" "Parameters: param1: \"The first parameter\" \n   param2 : \"The second parameter\""
+-- >>> parse parametersLine "(test)" "Parameters: [param1: \"The first parameter\", \n   param2 : \"The second parameter\"]"
 -- Right (Parameters [ParameterExpr (ParameterNameExpr "param1") (ParameterDescExpr "The first parameter"),ParameterExpr (ParameterNameExpr "param2") (ParameterDescExpr "The second parameter")])
 --
 parametersLine :: CharParser () URIPropertyExpr
@@ -560,7 +560,7 @@ bodyLine = Body <$>
 
 -- | Parses an error URIPropertyExpr
 --
--- >>> parse errorsLine "(test)" "Errors: 404: \"The first error\" \n   401 : \"The other error\""
+-- >>> parse errorsLine "(test)" "Errors: [404: \"The first error\" \n,   401 : \"The other error\"]"
 -- Right (Errors [ErrorExpr (ErrorCodeExpr 404) (ErrorDescExpr "The first error"),ErrorExpr (ErrorCodeExpr 401) (ErrorDescExpr "The other error")])
 --
 errorsLine :: CharParser () URIPropertyExpr
