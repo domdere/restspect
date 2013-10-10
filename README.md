@@ -1,4 +1,4 @@
-# restpect
+# restspect
 
 Parser for a REST API specification language.
 
