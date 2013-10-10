@@ -5,7 +5,7 @@ Parser for a REST API specification language.
 ## Specification Language Example
 
 The goal is to work towards a human readable specification that also encourages the design of a RESTful web service to follow the
-process outlined in Chapter 6 of [**RESTful Web Services**] [restful-web-services-book]
+process outlined in Chapter 6 of [**RESTful Web Services**] [restful-web-services]
 
 The goal is to parse a specification that looks something like this (human readable enough??):
 
