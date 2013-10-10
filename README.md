@@ -1,4 +1,4 @@
-# restspect
+# restspect [![Build Status](https://travis-ci.org/domdere/restspect.png)](https://travis-ci.org/domdere/restspect)
 
 Parser for a REST API specification language.
 
